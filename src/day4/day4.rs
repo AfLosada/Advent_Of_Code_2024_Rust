@@ -331,8 +331,10 @@ fn find_x_mas(grid: &Grid) -> Vec<Option<Vec<Position>>> {
                 let mut bottom_is_mas = bottom_left_non_set;
                 bottom_is_mas.sort();
 
-
-                if !left_is_mas.iter().eq(&bottom_is_mas) || !left_is_mas.iter().eq(&mas_set) || !bottom_is_mas.iter().eq(&mas_set) {
+                if !left_is_mas.iter().eq(&bottom_is_mas)
+                    || !left_is_mas.iter().eq(&mas_set)
+                    || !bottom_is_mas.iter().eq(&mas_set)
+                {
                     continue;
                 }
 
