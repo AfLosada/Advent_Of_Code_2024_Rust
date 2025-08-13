@@ -257,8 +257,8 @@ fn print_xmas(xmas: &Vec<Option<Vec<Position>>>, grid: &Grid) -> Grid {
     xmas_non_null.retain(|word| word.is_some());
     let positions_to_keep = HashSet::from_iter(xmas_non_null.iter().flatten().cloned().flatten());
     let new_grid = grid.new_from_position_vec(&positions_to_keep);
-    println!("Amount of xmas found: {}", xmas_non_null.len());
     new_grid.print_grid();
+    println!("Amount of xmas found: {}", xmas_non_null.len());
     new_grid
 }
 
@@ -318,33 +318,39 @@ fn find_x_mas(grid: &Grid) -> Vec<Option<Vec<Position>>> {
                     continue;
                 }
 
-                let top_left_non_set = [
-                    top_left.unwrap().to_string(),
-                    "A".to_owned(),
-                    bottom_right.unwrap().to_string(),
-                ];
-                let top_left_diagonal = HashSet::from(top_left_non_set.clone());
+                let top_left_non_set = [top_left.unwrap() as u8, b'A', bottom_right.unwrap() as u8];
 
-                let bottom_left_non_set = [
-                    bottom_left.unwrap().to_string(),
-                    "A".to_owned(),
-                    top_right.unwrap().to_string(),
-                ];
-                let bottom_left_diagonal = HashSet::from(bottom_left_non_set.clone());
+                let bottom_left_non_set =
+                    [bottom_left.unwrap() as u8, b'A', top_right.unwrap() as u8];
 
-                let mas_set = HashSet::from(["M".to_owned(), "A".to_owned(), "S".to_owned()]);
+                let mut mas_set = [b'M', b'A', b'S'];
+                mas_set.sort();
 
-                if top_left_diagonal.eq(&bottom_left_diagonal)
-                    && top_left_diagonal.eq(&mas_set)
-                    && bottom_left_diagonal.eq(&mas_set)
-                {
+                let mut left_is_mas = top_left_non_set;
+                left_is_mas.sort();
+                let mut bottom_is_mas = bottom_left_non_set;
+                bottom_is_mas.sort();
+
+
+                if !left_is_mas.iter().eq(&bottom_is_mas) || !left_is_mas.iter().eq(&mas_set) || !bottom_is_mas.iter().eq(&mas_set) {
                     continue;
                 }
 
-                let top_str = top_left_non_set.join(" ");
-                let bot_str = bottom_left_non_set.join(" ");
-                println!("top_left: {}. bottom_left: {}", top_str, bot_str);
-                println!("X is equal to S: {} {} {}", "");
+                let top_str = top_left_non_set
+                    .map(|ch| (ch as char).to_string())
+                    .join(" ");
+                let bot_str = bottom_left_non_set
+                    .map(|ch| (ch as char).to_string())
+                    .join(" ");
+                /* println!("top_left: {}. bottom_left: {}", top_str, bot_str);
+                println!(
+                    "X is equal to S: {} {} {}",
+                    top_left_non_set[0], top_left_non_set[1], top_left_non_set[2]
+                );
+                println!(
+                    "X is equal to S: {} {} {}",
+                    bottom_left_non_set[0], bottom_left_non_set[1], bottom_left_non_set[2]
+                ); */
 
                 let top_left_position =
                     calculate_position_diff_position(&Direction::TopLeft).add(&position);
