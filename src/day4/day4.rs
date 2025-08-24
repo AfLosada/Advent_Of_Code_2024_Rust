@@ -3,9 +3,7 @@ use std::{
     fs::{self},
 };
 
-fn read_input(file: &str) -> String {
-    fs::read_to_string(format!("src/day4/{}", file)).unwrap()
-}
+use crate::util::util;
 
 fn remove_useless_characters(input: &str) -> String {
     input
@@ -377,7 +375,7 @@ fn find_x_mas(grid: &Grid) -> Vec<Option<Vec<Position>>> {
 }
 
 pub fn main(input: &str) {
-    let input = read_input(input);
+    let input = util::read_input("day4", input);
     let clean_input = remove_useless_characters(&input);
     let grid = Grid::new(&clean_input);
     let xmas = find_xmas(&grid);
@@ -385,7 +383,7 @@ pub fn main(input: &str) {
 }
 
 pub fn main_2(input: &str) {
-    let input = read_input(input);
+    let input = util::read_input("day4", input);
     let clean_input = remove_useless_characters(&input);
     let grid = Grid::new(&clean_input);
     let xmas = find_x_mas(&grid);
@@ -397,7 +395,7 @@ mod tests {
     use super::*;
     #[test]
     fn test_clean_input() {
-        let input = read_input("test");
+        let input = util::read_input("day4", "test");
         let clean_input = remove_useless_characters(&input);
 
         println!("{}", clean_input);
