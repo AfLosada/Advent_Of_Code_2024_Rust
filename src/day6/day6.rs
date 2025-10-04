@@ -1,3 +1,5 @@
+use std::ptr::eq;
+
 use crate::util::util;
 
 fn extract_matrices_from_input(input: &str) -> Matrices {
@@ -46,6 +48,9 @@ fn extract_matrices_from_input(input: &str) -> Matrices {
         },
     )
 }
+
+type Matrix<T> = Vec<Row<T>>;
+type Row<T> = Vec<T>;
 
 struct Matrices {
     visit_matrix: Vec<Vec<i32>>,
@@ -165,6 +170,51 @@ impl Matrices {
         None
     }
 
+    fn extract_intersection(
+        &self,
+        guard_position: &Position<i32>,
+        direction: &Direction,
+    ) -> (Row<Node>, Row<Node>) {
+      match direction {
+        Direction::UP | Direction::DOWN => {
+          let first_row = self.node_matrix[guard_position.x as usize].clone();
+          let rotated_matrix = rotate_matrix_90(self.node_matrix.clone());
+          let second_row = rotated_matrix[guard_position.x as usize].clone();
+          (first_row, second_row)
+        },
+        Direction::LEFT | Direction::RIGHT => {
+          let first_row = self.node_matrix[guard_position.x as usize].clone();
+          let rotated_matrix = rotate_matrix_90(self.node_matrix.clone());
+          let second_row = rotated_matrix[guard_position.x as usize].clone();
+          (second_row, first_row)
+        }
+      }
+    }
+
+    fn has_candidate_for_obstruction(
+        &self,
+        guard_position: &Position<i32>,
+        direction: &Direction,
+    ) -> Option<Node> {
+        let (current_row, perpendicular_row) = self.extract_intersection(guard_position, direction);
+        let current_guard_position = current_row.iter().position(|node| node.node_type == NodeType::GUARD).unwrap();
+        match direction {
+          Direction::UP | Direction::LEFT => {
+            let has_obstacle_before = current_row[current_guard_position..].iter().any(|node|{
+              node.node_type == NodeType::OBSTACLE
+            });
+            let has_2_obstacles_perpendicular = perpendicular_row.iter().filter(|node|{
+              node.node_type == NodeType::OBSTACLE
+            }).count() >= 2;
+            
+            None
+          },
+          Direction::DOWN | Direction::RIGHT => {
+            None
+          }
+        }
+    }
+
     fn navigate_and_get_direction(&mut self, direction: &Direction) -> Option<Direction> {
         let guard_position = self.find_guard().unwrap();
         let new_position = guard_position.move_to_direction(direction);
@@ -224,6 +274,16 @@ fn navigate(mut matrices: Matrices) -> Matrices {
     matrices
 }
 
+fn rotate_matrix_90<T: Clone>(matrix: Vec<Vec<T>>) -> Vec<Vec<T>> {
+    let mut new_matrix: Vec<Vec<T>> = vec![];
+    for x in 0..matrix.len() {
+        for y in 0..matrix.len() {
+            new_matrix[y][x] = matrix[x][y].clone();
+        }
+    }
+    matrix
+}
+
 fn print_matrix<T: ToString>(matrix: &Vec<Vec<T>>) -> String {
     matrix
         .iter()
@@ -235,6 +295,12 @@ fn print_matrix<T: ToString>(matrix: &Vec<Vec<T>>) -> String {
             )
         })
         .fold("".to_string(), |a, curr| a + curr.as_str())
+}
+fn count_obstructions_in_vector(vector: &Vec<Node>) -> usize {
+    vector
+        .iter()
+        .filter(|node| node.node_type == NodeType::OBSTACLE)
+        .count()
 }
 
 #[cfg(test)]
@@ -297,5 +363,12 @@ mod tests {
             .count();
         println!("uniques: {}", uniques);
         assert_eq!(uniques, 5199);
+    }
+    #[test]
+    fn navigate_part_2_with_test() {
+        // a position that loops the guard has:
+        // 1. 1 obstacle in the same direction of the guard, but behind the guard.
+        // 2. 2 obstacles in the perpendicular direction of the guard.
+        // the obstacle has to be put 1 step away from the 2 obstacles in the direction of the guard.
     }
 }
