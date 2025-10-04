@@ -311,6 +311,7 @@ fn cyclical_tree_build(original_rule: &str, remaining_words: Vec<&str>) -> TrieN
 }
 
 fn is_rule_valid_on_line(line: &str, rule: &str) -> Option<bool> {
+    println!("checking rule validty {}", rule);
     let mut split_rules = rule.split("|");
     let first = split_rules.next().unwrap();
     let last = split_rules.next().unwrap();
@@ -359,13 +360,15 @@ fn fix_line(line: &Vec<String>, rules: &Vec<String>) -> String {
         .iter()
         .filter(|rule| {
             let split_line = &line.join(",");
-            !is_rule_valid_on_line(split_line, rule.as_str()).is_some()
+            !is_rule_valid_on_line(split_line, rule.as_str()).unwrap()
         })
         .collect::<Vec<_>>();
     if invalid_rules.len() == 0 {
+        println!("no invalid rules");
         return line.join(",");
     }
-    let rule_to_fix = rules[0].clone();
+    println!("invalid rules {:?}", invalid_rules);
+    let rule_to_fix = invalid_rules[0].clone();
     println!("rule to fix: {}", rule_to_fix);
     let fixed_line_after_rule = fix_rule(&line, &rule_to_fix)
         .split(",")
@@ -388,9 +391,11 @@ fn fix_rule(line: &Vec<String>, rule: &String) -> String {
     let new_string = move_item_in_vec(
         line,
         second_number_position_in_vec,
-        first_number_position_in_vec + 1,
+        first_number_position_in_vec,
     );
-    new_string.join(",")
+    let rule_as_string = new_string.join(",");
+    println!("fixed rule: {:#}", rule_as_string);
+    rule_as_string
 }
 
 fn move_item_in_vec<T: Clone>(vec: &Vec<T>, origin: usize, destination: usize) -> Vec<T> {
@@ -452,7 +457,6 @@ mod tests {
                     .iter()
                     .map(|rule| rule.unwrap().get_value_list().first().unwrap().to_string())
                     .collect::<Vec<_>>();
-                println!("rules to fix: {}", rules.join(","));
                 println!("line to fix: {}", line);
                 fix_line(&split_line, &rules)
             })
@@ -474,5 +478,37 @@ mod tests {
         let sum: i32 = get_midpoints_of_lines(&lines).into_iter().sum();
         println!("Sum of midpoints: {}", sum);
         assert_eq!(sum, 4609);
+    }
+    #[test]
+    fn test_answer_2() {
+        let page = extract_rules_and_rows_from_input("input.txt");
+        let rule_trie = RuleTrie::new(&page);
+        let lines = rule_trie.get_lines_that_dont_comply_rules();
+        println!(
+            "lines to fix: {:?}",
+            lines
+                .iter()
+                .map(|l| {
+                    let aas = l.0.clone();
+                    aas
+                })
+                .collect::<Vec<_>>()
+        );
+        let fixed_lines = lines
+            .iter()
+            .map(|(line, rules)| {
+                let split_line = line.split(",").map(|l| l.to_string()).collect::<Vec<_>>();
+                let rules = rules
+                    .iter()
+                    .map(|rule| rule.unwrap().get_value_list().first().unwrap().to_string())
+                    .collect::<Vec<_>>();
+                println!("line to fix: {}", line);
+                fix_line(&split_line, &rules)
+            })
+            .collect::<Vec<_>>();
+        println!("{:#}", fixed_lines.join("\n"));
+        let sum: i32 = get_midpoints_of_lines(&fixed_lines).into_iter().sum();
+        println!("Sum of midpoints: {}", sum);
+        assert_eq!(sum, 5723);
     }
 }
