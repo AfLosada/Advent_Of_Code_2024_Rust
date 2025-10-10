@@ -175,49 +175,66 @@ impl Matrices {
         guard_position: &Position<i32>,
         direction: &Direction,
     ) -> (Row<Node>, Row<Node>) {
-      match direction {
-        Direction::UP | Direction::DOWN => {
-          let first_row = self.node_matrix[guard_position.x as usize].clone();
-          let rotated_matrix = rotate_matrix_90(self.node_matrix.clone());
-          let second_row = rotated_matrix[guard_position.x as usize].clone();
-          (first_row, second_row)
-        },
-        Direction::LEFT | Direction::RIGHT => {
-          let first_row = self.node_matrix[guard_position.x as usize].clone();
-          let rotated_matrix = rotate_matrix_90(self.node_matrix.clone());
-          let second_row = rotated_matrix[guard_position.x as usize].clone();
-          (second_row, first_row)
+        match direction {
+            Direction::UP | Direction::DOWN => {
+                let first_row = self.node_matrix[guard_position.x as usize].clone();
+                let rotated_matrix = rotate_matrix_90(self.node_matrix.clone());
+                let second_row = rotated_matrix[guard_position.x as usize].clone();
+                (first_row, second_row)
+            }
+            Direction::LEFT | Direction::RIGHT => {
+                let first_row = self.node_matrix[guard_position.x as usize].clone();
+                let rotated_matrix = rotate_matrix_90(self.node_matrix.clone());
+                let second_row = rotated_matrix[guard_position.x as usize].clone();
+                (second_row, first_row)
+            }
         }
-      }
     }
 
     fn has_candidate_for_obstruction(
         &self,
         guard_position: &Position<i32>,
         direction: &Direction,
-    ) -> Option<Node> {
+    ) -> Option<Position<i32>> {
         let (current_row, perpendicular_row) = self.extract_intersection(guard_position, direction);
-        let current_guard_position = current_row.iter().position(|node| node.node_type == NodeType::GUARD).unwrap();
+        let current_guard_position = current_row
+            .iter()
+            .position(|node| node.node_type == NodeType::GUARD)
+            .unwrap();
         match direction {
-          Direction::UP | Direction::LEFT => {
-            let has_obstacle_before = current_row[current_guard_position..].iter().any(|node|{
-              node.node_type == NodeType::OBSTACLE
-            });
-            let has_2_obstacles_perpendicular = perpendicular_row.iter().filter(|node|{
-              node.node_type == NodeType::OBSTACLE
-            }).count() >= 2;
-            
-            None
-          },
-          Direction::DOWN | Direction::RIGHT => {
-            None
-          }
+            Direction::UP | Direction::LEFT => {
+                let has_obstacle_before = current_row[current_guard_position..]
+                    .iter()
+                    .any(|node| node.node_type == NodeType::OBSTACLE);
+                let has_2_obstacles_perpendicular = perpendicular_row
+                    .iter()
+                    .filter(|node| node.node_type == NodeType::OBSTACLE)
+                    .count()
+                    >= 2;
+                if has_2_obstacles_perpendicular && has_obstacle_before {
+                    let current_guard_node = &current_row[current_guard_position];
+                    let obstacle_node_position =
+                        current_guard_node.position.move_to_direction(direction);
+                    return Some(obstacle_node_position);
+                }
+                None
+            }
+            Direction::DOWN | Direction::RIGHT => None,
         }
     }
 
-    fn navigate_and_get_direction(&mut self, direction: &Direction) -> Option<Direction> {
+    fn navigate_and_get_direction(
+        &mut self,
+        direction: &Direction,
+        mut calculate_obstacle: impl FnMut(
+            &Matrices,
+            &Position<i32>,
+            &Direction,
+        ) -> Option<Position<i32>>,
+    ) -> Option<Direction> {
         let guard_position = self.find_guard().unwrap();
         let new_position = guard_position.move_to_direction(direction);
+        calculate_obstacle(&self, &guard_position, direction);
         if new_position.x < 0
             || new_position.y < 0
             || new_position.x >= self.node_matrix.len() as i32
@@ -266,10 +283,17 @@ impl Matrices {
     }
 }
 
-fn navigate(mut matrices: Matrices) -> Matrices {
-    let mut direction = matrices.navigate_and_get_direction(&Direction::UP);
+fn navigate(
+    mut matrices: Matrices,
+    calculate_obstacle: impl FnMut(
+        &Matrices,
+        &Position<i32>,
+        &Direction,
+    ) -> Option<Position<i32>>,
+) -> Matrices {
+    let mut direction = matrices.navigate_and_get_direction(&Direction::UP, &calculate_obstacle);
     while direction.is_some() {
-        direction = matrices.navigate_and_get_direction(&direction.unwrap());
+        direction = matrices.navigate_and_get_direction(&direction.unwrap(), &calculate_obstacle);
     }
     matrices
 }
@@ -318,7 +342,7 @@ mod tests {
     #[test]
     fn navigate_test() {
         let mut matrices = extract_matrices_from_input("test.txt");
-        let matrices = navigate(matrices);
+        let matrices = navigate(matrices, |_, _, _| None);
         let matrix_string = print_matrix(&matrices.visit_matrix);
         print!("{}", matrix_string);
         assert_eq!(
@@ -339,7 +363,7 @@ mod tests {
     #[test]
     fn navigate_with_test_answer() {
         let matrices = extract_matrices_from_input("test.txt");
-        let matrices = navigate(matrices);
+        let matrices = navigate(matrices, |_, _, _| None);
         let uniques = matrices
             .visit_matrix
             .iter()
@@ -352,7 +376,7 @@ mod tests {
     #[test]
     fn navigate_with_real_answer() {
         let matrices = extract_matrices_from_input("input.txt");
-        let matrices = navigate(matrices);
+        let matrices = navigate(matrices, |_, _, _| None);
         let matrix_string = print_matrix(&matrices.visit_matrix);
         print!("{}", matrix_string);
         let uniques = matrices
@@ -370,5 +394,21 @@ mod tests {
         // 1. 1 obstacle in the same direction of the guard, but behind the guard.
         // 2. 2 obstacles in the perpendicular direction of the guard.
         // the obstacle has to be put 1 step away from the 2 obstacles in the direction of the guard.
+        let matrices = extract_matrices_from_input("test.txt");
+        let mut candidates_for_obstuction: Vec<Position<i32>> = vec![];
+        let matrices = navigate(matrices, |matrix, position, direction| {
+            let candidate = matrix.has_candidate_for_obstruction(position, direction);
+            if candidate.is_some() {
+                candidates_for_obstuction.push(candidate.unwrap());
+            }
+            candidate
+        });
+        let uniques = matrices
+            .visit_matrix
+            .iter()
+            .flatten()
+            .filter(|number| number > &&0)
+            .count();
+        println!("uniques: {}", uniques);
     }
 }
