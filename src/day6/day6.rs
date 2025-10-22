@@ -1,4 +1,4 @@
-use std::ptr::eq;
+use std::{fmt, ptr::eq};
 
 use crate::util::util;
 
@@ -17,7 +17,8 @@ fn extract_matrices_from_input(input: &str) -> Matrices {
         |mut acc, (x, curr)| {
             // println!("matrix len: {}", acc.visit_matrix.len());
             // println!("matrix len: {}", acc.node_matrix.len());
-            acc.visit_matrix.push(vec![0; curr.len()]);
+            acc.visit_matrix
+                .push(vec![VisitDirections(Vec::new()); curr.len()]);
             // println!(
             //     "visit matrix {}: {:?}, len: {}",
             //     x,
@@ -37,7 +38,6 @@ fn extract_matrices_from_input(input: &str) -> Matrices {
                     y: y as i32,
                 };
                 let node = Node::from(c, position);
-                acc.visit_matrix[x][y] = 0;
                 acc.node_matrix[x][y] = node;
                 Matrices {
                     visit_matrix: acc.visit_matrix,
@@ -52,10 +52,20 @@ fn extract_matrices_from_input(input: &str) -> Matrices {
 type Matrix<T> = Vec<Row<T>>;
 type Row<T> = Vec<T>;
 
+#[derive(Clone)]
 struct Matrices {
-    visit_matrix: Vec<Vec<i32>>,
+    visit_matrix: Vec<Vec<VisitDirections>>,
     guard_path: Vec<Path>,
     node_matrix: Vec<Vec<Node>>,
+}
+
+#[derive(Clone)]
+struct VisitDirections(Vec<Direction>);
+
+impl ToString for VisitDirections {
+    fn to_string(&self) -> String {
+        self.0.len().to_string()
+    }
 }
 
 #[derive(Clone, PartialEq)]
@@ -65,7 +75,7 @@ enum NodeType {
     EMPTY,
 }
 
-#[derive(Clone)]
+#[derive(Clone, PartialEq)]
 enum Direction {
     UP,
     DOWN,
@@ -151,6 +161,7 @@ struct Node {
     position: Position<i32>,
 }
 
+#[derive(Clone)]
 struct Path {
     nodes: Vec<Node>,
 }
@@ -175,19 +186,11 @@ impl Matrices {
         guard_position: &Position<i32>,
         direction: &Direction,
     ) -> (Row<Node>, Row<Node>) {
+        let column = get_column_of_matrix(&self.node_matrix, guard_position.y as usize);
+        let row = self.node_matrix[guard_position.x as usize].to_vec();
         match direction {
-            Direction::UP | Direction::DOWN => {
-                let first_row = self.node_matrix[guard_position.x as usize].clone();
-                let rotated_matrix = rotate_matrix_90(self.node_matrix.clone());
-                let second_row = rotated_matrix[guard_position.x as usize].clone();
-                (first_row, second_row)
-            }
-            Direction::LEFT | Direction::RIGHT => {
-                let first_row = self.node_matrix[guard_position.x as usize].clone();
-                let rotated_matrix = rotate_matrix_90(self.node_matrix.clone());
-                let second_row = rotated_matrix[guard_position.x as usize].clone();
-                (second_row, first_row)
-            }
+            Direction::UP | Direction::DOWN => (column, row),
+            Direction::LEFT | Direction::RIGHT => (row, column),
         }
     }
 
@@ -196,45 +199,38 @@ impl Matrices {
         guard_position: &Position<i32>,
         direction: &Direction,
     ) -> Option<Position<i32>> {
-        let (current_row, perpendicular_row) = self.extract_intersection(guard_position, direction);
+        let (mut current_row, perpendicular_row) =
+            self.extract_intersection(guard_position, direction);
+
         let current_guard_position = current_row
             .iter()
             .position(|node| node.node_type == NodeType::GUARD)
             .unwrap();
         match direction {
             Direction::UP | Direction::LEFT => {
-                let has_obstacle_before = current_row[current_guard_position..]
-                    .iter()
-                    .any(|node| node.node_type == NodeType::OBSTACLE);
-                let has_2_obstacles_perpendicular = perpendicular_row
-                    .iter()
-                    .filter(|node| node.node_type == NodeType::OBSTACLE)
-                    .count()
-                    >= 2;
-                if has_2_obstacles_perpendicular && has_obstacle_before {
-                    let current_guard_node = &current_row[current_guard_position];
-                    let obstacle_node_position =
-                        current_guard_node.position.move_to_direction(direction);
-                    return Some(obstacle_node_position);
-                }
-                None
+                current_row.reverse();
             }
-            Direction::DOWN | Direction::RIGHT => None,
+            Direction::DOWN | Direction::RIGHT => {}
+        };
+        let has_obstacle_before = current_row[current_guard_position..]
+            .iter()
+            .any(|node| node.node_type == NodeType::OBSTACLE);
+        let has_2_obstacles_perpendicular = perpendicular_row
+            .iter()
+            .filter(|node| node.node_type == NodeType::OBSTACLE)
+            .count()
+            >= 2;
+        if has_2_obstacles_perpendicular && has_obstacle_before {
+            let current_guard_node = &current_row[current_guard_position];
+            let obstacle_node_position = current_guard_node.position.move_to_direction(direction);
+            return Some(obstacle_node_position);
         }
+        None
     }
 
-    fn navigate_and_get_direction(
-        &mut self,
-        direction: &Direction,
-        mut calculate_obstacle: impl FnMut(
-            &Matrices,
-            &Position<i32>,
-            &Direction,
-        ) -> Option<Position<i32>>,
-    ) -> Option<Direction> {
+    fn navigate_and_get_direction(&mut self, direction: &Direction) -> Option<Direction> {
         let guard_position = self.find_guard().unwrap();
         let new_position = guard_position.move_to_direction(direction);
-        calculate_obstacle(&self, &guard_position, direction);
         if new_position.x < 0
             || new_position.y < 0
             || new_position.x >= self.node_matrix.len() as i32
@@ -244,7 +240,9 @@ impl Matrices {
             let current_node =
                 &mut self.node_matrix[guard_position.x as usize][guard_position.y as usize];
             current_node.node_type = NodeType::EMPTY;
-            self.visit_matrix[guard_position.x as usize][guard_position.y as usize] += 1;
+            self.visit_matrix[guard_position.x as usize][guard_position.y as usize]
+                .0
+                .push(direction.clone());
             let last_pos = self.guard_path.len() - 1;
             let last_path_nodes = &mut self.guard_path[last_pos].nodes;
             last_path_nodes.push(current_node.clone());
@@ -255,7 +253,9 @@ impl Matrices {
             // Turn around
             let current_node =
                 &self.node_matrix[guard_position.x as usize][guard_position.y as usize];
-            self.visit_matrix[guard_position.x as usize][guard_position.y as usize] += 1;
+            self.visit_matrix[guard_position.x as usize][guard_position.y as usize]
+                .0
+                .push(direction.clone());
             let mut new_path = Path { nodes: Vec::new() };
             let last_path_nodes = &mut new_path.nodes;
             last_path_nodes.push(current_node.clone());
@@ -272,7 +272,9 @@ impl Matrices {
             new_node.node_type = NodeType::GUARD;
             let current_node =
                 &self.node_matrix[guard_position.x as usize][guard_position.y as usize];
-            self.visit_matrix[guard_position.x as usize][guard_position.y as usize] += 1;
+            self.visit_matrix[guard_position.x as usize][guard_position.y as usize]
+                .0
+                .push(direction.clone());
             let mut new_path = Path { nodes: Vec::new() };
             let last_path_nodes = &mut new_path.nodes;
             last_path_nodes.push(current_node.clone());
@@ -285,27 +287,27 @@ impl Matrices {
 
 fn navigate(
     mut matrices: Matrices,
-    calculate_obstacle: impl FnMut(
-        &Matrices,
-        &Position<i32>,
-        &Direction,
-    ) -> Option<Position<i32>>,
+    direction: Option<&Direction>,
+    can_continue: impl Fn(&Matrices, Option<&Direction>) -> bool,
 ) -> Matrices {
-    let mut direction = matrices.navigate_and_get_direction(&Direction::UP, &calculate_obstacle);
-    while direction.is_some() {
-        direction = matrices.navigate_and_get_direction(&direction.unwrap(), &calculate_obstacle);
+    let mut direction = direction.cloned();
+    while can_continue(&matrices, direction.as_ref()) {
+        let dir_non_option = direction.unwrap();
+        direction = matrices.navigate_and_get_direction(&dir_non_option);
     }
     matrices
 }
 
-fn rotate_matrix_90<T: Clone>(matrix: Vec<Vec<T>>) -> Vec<Vec<T>> {
-    let mut new_matrix: Vec<Vec<T>> = vec![];
+fn get_column_of_matrix<T: Clone>(matrix: &Vec<Vec<T>>, column: usize) -> Vec<T> {
+    let mut vec: Vec<T> = Vec::with_capacity(matrix.len());
     for x in 0..matrix.len() {
-        for y in 0..matrix.len() {
-            new_matrix[y][x] = matrix[x][y].clone();
+        for y in 0..matrix[x].len() {
+            if y == column {
+                vec[x] = matrix[x][y].clone();
+            }
         }
     }
-    matrix
+    vec
 }
 
 fn print_matrix<T: ToString>(matrix: &Vec<Vec<T>>) -> String {
@@ -327,10 +329,42 @@ fn count_obstructions_in_vector(vector: &Vec<Node>) -> usize {
         .count()
 }
 
+fn add_obstruction_in_front(
+    matrix: &mut Matrices,
+    guard_position: &Position<i32>,
+    direction: &Direction,
+) -> Position<i32> {
+    let obstruction_position = guard_position.move_to_direction(direction);
+    matrix.node_matrix[obstruction_position.x as usize][obstruction_position.y as usize]
+        .node_type = NodeType::OBSTACLE;
+    obstruction_position
+}
+
+fn remove_obstruction_from_position(matrix: &mut Matrices, position: &Position<i32>) {
+    matrix.node_matrix[position.x as usize][position.y as usize].node_type = NodeType::EMPTY;
+}
+
+fn obstruction_navigation(matrix: &Matrices, position: &Position<i32>, direction: &Direction) {
+    let mut unique_directions = directions.0.clone();
+    unique_directions.dedup_by(|a, b| a == b);
+    navigate(matrices.clone(), |matrix, direction| {
+        // creating a new matrix each time so I can use my navigate function without any concerns
+        // side effects, what?! who?
+        match direction {
+            Some(direction) => {
+                let mut matrix = matrix.clone();
+                add_obstruction_in_front(&mut matrix, position, direction);
+                false
+            }
+            None => true,
+        }
+    });
+}
+
 #[cfg(test)]
 mod tests {
     use core::fmt;
-    use std::string;
+    use std::{cell::RefCell, rc::Rc, string};
 
     use super::*;
     #[test]
@@ -341,8 +375,8 @@ mod tests {
     }
     #[test]
     fn navigate_test() {
-        let mut matrices = extract_matrices_from_input("test.txt");
-        let matrices = navigate(matrices, |_, _, _| None);
+        let matrices = extract_matrices_from_input("test.txt");
+        let matrices = navigate(matrices, |_, direction| direction.is_some());
         let matrix_string = print_matrix(&matrices.visit_matrix);
         print!("{}", matrix_string);
         assert_eq!(
@@ -362,28 +396,48 @@ mod tests {
     }
     #[test]
     fn navigate_with_test_answer() {
-        let matrices = extract_matrices_from_input("test.txt");
-        let matrices = navigate(matrices, |_, _, _| None);
+        let mut matrices = extract_matrices_from_input("test.txt");
+        let direction = &matrices.navigate_and_get_direction(&Direction::UP);
+        let matrices = navigate(matrices, direction.as_ref(), |_, direction| {
+            direction.is_some()
+        });
         let uniques = matrices
             .visit_matrix
             .iter()
             .flatten()
-            .filter(|number| number > &&0)
+            .filter(|number| number.0.len() > 0)
             .count();
         println!("uniques: {}", uniques);
         assert_eq!(uniques, 41);
     }
     #[test]
     fn navigate_with_real_answer() {
-        let matrices = extract_matrices_from_input("input.txt");
-        let matrices = navigate(matrices, |_, _, _| None);
+        let mut matrices = extract_matrices_from_input("input.txt");
+        let direction = matrices.navigate_and_get_direction(&Direction::UP);
+        let matrices = navigate(matrices, direction.as_ref(), |_, direction| {
+            direction.is_some()
+        });
         let matrix_string = print_matrix(&matrices.visit_matrix);
         print!("{}", matrix_string);
         let uniques = matrices
             .visit_matrix
             .iter()
+            .enumerate()
+            .map(|(x, row)| {
+                row.iter()
+                    .enumerate()
+                    .filter_map(move |(y, col)| match col.0.len() > 0 {
+                        true => Some((
+                            Position {
+                                x: x.clone(),
+                                y: y.clone(),
+                            },
+                            col.clone(),
+                        )),
+                        false => None,
+                    })
+            })
             .flatten()
-            .filter(|number| number > &&0)
             .count();
         println!("uniques: {}", uniques);
         assert_eq!(uniques, 5199);
@@ -394,21 +448,81 @@ mod tests {
         // 1. 1 obstacle in the same direction of the guard, but behind the guard.
         // 2. 2 obstacles in the perpendicular direction of the guard.
         // the obstacle has to be put 1 step away from the 2 obstacles in the direction of the guard.
-        let matrices = extract_matrices_from_input("test.txt");
-        let mut candidates_for_obstuction: Vec<Position<i32>> = vec![];
-        let matrices = navigate(matrices, |matrix, position, direction| {
-            let candidate = matrix.has_candidate_for_obstruction(position, direction);
-            if candidate.is_some() {
-                candidates_for_obstuction.push(candidate.unwrap());
-            }
-            candidate
+        // let matrices = extract_matrices_from_input("test.txt");
+        // let candidates_for_obstuction: Rc<RefCell<Vec<Position<i32>>>> =
+        //     Rc::new(RefCell::new(vec![]));
+        // let matrices = navigate(matrices, |matrix, position, direction| {
+        //     let candidate = matrix.has_candidate_for_obstruction(position, direction);
+        //     if candidate.is_some() {
+        //         candidates_for_obstuction
+        //             .borrow_mut()
+        //             .push(candidate.clone().unwrap());
+        //     }
+        //     candidate.clone()
+        // });
+        //     .visit_matrix
+        //     .iter()
+        // let uniques = matrices
+        //     .flatten()
+        //     .filter(|number| number > &&0)
+        //     .count();
+        // println!("uniques: {}", uniques);
+
+        // The actual heuristic implies a simulation.
+        // If I turn right, will I return to the same spot in the same direction? If it means yes the simulation can stop.
+
+        let matrices = extract_matrices_from_input("input.txt");
+        let direction = matrices.navigate_and_get_direction(&Direction::UP);
+        let matrices = navigate(matrices, direction.as_ref(), |_, direction| {
+            direction.is_some()
         });
-        let uniques = matrices
+        let matrix_string = print_matrix(&matrices.visit_matrix);
+        print!("{}", matrix_string);
+        let uniques: Vec<(Position<i32>, VisitDirections)> = matrices
             .visit_matrix
             .iter()
+            .enumerate()
+            .map(|(x, row)| {
+                row.iter()
+                    .enumerate()
+                    .filter_map(move |(y, col)| match col.0.len() > 0 {
+                        true => Some((
+                            Position {
+                                x: x.clone() as i32,
+                                y: y.clone() as i32,
+                            },
+                            col.clone(),
+                        )),
+                        false => None,
+                    })
+            })
             .flatten()
-            .filter(|number| number > &&0)
-            .count();
-        println!("uniques: {}", uniques);
+            .collect();
+        uniques.iter().map(|(position, directions)| {
+            let mut unique_directions = directions.0.clone();
+            unique_directions.dedup_by(|a, b| a == b);
+            unique_directions.iter().for_each(|direction| {
+                // creating a new matrix each time so I can use my navigate function without any concerns
+                // side effects, what?! who?
+                let mut matrix = matrices.clone();
+                let obstruction_position =
+                    add_obstruction_in_front(&mut matrix, position, direction);
+                let did_loop = Rc::new(RefCell::new(false))
+                navigate(
+                    matrices.clone(),
+                    Some(direction),
+                    |matrix, direction| match direction {
+                        Some(direction) => {
+                            
+                        },
+                        None => {
+                            did_loop.borrow_mut().to_owned() = false;
+                            true
+                        },
+                    },
+                );
+                remove_obstruction_from_position(&mut matrix, &obstruction_position);
+            });
+        });
     }
 }
