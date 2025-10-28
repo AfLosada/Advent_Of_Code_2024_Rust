@@ -1,4 +1,4 @@
-mod day4;
-mod day5;
-mod day6;
+pub mod day4;
+pub mod day5;
+pub mod day6;
 pub mod util;
