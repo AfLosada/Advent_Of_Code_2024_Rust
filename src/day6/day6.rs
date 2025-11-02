@@ -658,6 +658,10 @@ pub fn part_2() {
     assert_eq!(total_obstructions, 6);
 }
 
+pub fn main(_: String) {
+    part_2();
+}
+
 #[cfg(test)]
 mod tests {
     use core::fmt;

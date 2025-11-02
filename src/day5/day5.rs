@@ -409,6 +409,10 @@ fn move_item_in_vec<T: Clone>(vec: &Vec<T>, origin: usize, destination: usize) -
     .concat()
 }
 
+pub fn main(input: String) {
+  
+}
+
 #[cfg(test)]
 mod tests {
     use core::fmt;
